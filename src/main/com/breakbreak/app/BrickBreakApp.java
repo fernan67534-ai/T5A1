@@ -7,6 +7,7 @@ import main.com.breakbreak.enums.State;
 import main.com.breakbreak.core.GameLoop;
 import main.com.breakbreak.util.GameEventListener;
 import main.com.breakbreak.util.MusicPlayer;
+import main.com.breakbreak.util.ScoreManager;
 import main.com.breakbreak.util.SoundPlayer;
 
 import javax.swing.*;
@@ -39,8 +40,10 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
     private List<BlockComponent> blockList = new ArrayList<>();
     private GameLoop gameLoop;
     private GameOverPanel gameOverPanel;
+    private NameEntryPanel nameEntryPanel;
     private BonoSidebarPanel bonoSidebarPanel;
 
+    private final ScoreManager scoreManager = ScoreManager.getInstance();
     private int currentRecord = 0;
     private int nivelProgreso = 1;
 
@@ -130,9 +133,13 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
                 }
             }
         });
-
         gameOverPanel = new GameOverPanel(0, 0, 480, 740);
         gamePanel.add(gameOverPanel, Integer.valueOf(10));
+
+        // Panel emergente de ingreso de nombre al perder (Entregable 6)
+        nameEntryPanel = new NameEntryPanel();
+        gamePanel.add(nameEntryPanel, Integer.valueOf(20));
+        nameEntryPanel.getConfirmButton().addActionListener(e -> saveScoreAndShowGameOver());
 
         recordPanel = new RecordPanel();
         scorePanel = new ScorePanel();
@@ -160,7 +167,6 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         levelPanel.setBounds(70, 372, 240, 136);
         bonoSidebarPanel.setBounds(30, 518, 320, 65);
 
-        // Inyección de todos los paneles al sidebar (faltaban estas líneas)
         sidebarPanel.add(recordPanel);
         sidebarPanel.add(scorePanel);
         sidebarPanel.add(livePanel);
@@ -181,6 +187,7 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         gameLoop = new GameLoop(gamePanel, ball, paddle, border, blocks, new ArrayList<>());
         gameLoop.addListener(this);
         gameLoop.setBonoSidebarPanel(bonoSidebarPanel);
+
         // =========================================================================
         // 🏁 LISTENERS OPERATIVOS CON CONTROL DE MÚSICA INTEGRADO
         // =========================================================================
@@ -219,9 +226,10 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
             }
         });
 
-        // Iniciar récord de sesión en 0 según la rúbrica del Entregable 5
-        this.currentRecord = 0;
-        recordPanel.setRecord(0);
+        // Cargar historial persistente desde scores.score al iniciar (Entregable 6)
+        scoreManager.load();
+        this.currentRecord = scoreManager.getHighestScore();
+        recordPanel.setRecord(this.currentRecord);
     }
 
     // =========================================================================
@@ -272,24 +280,52 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         resetButton.addActionListener(e -> avanzarSiguienteNivel());
 
         WinPanel winPanel = new WinPanel(finalScore);
+        // Igualar dimensiones exactas con GameOverPanel (0, 0, 480, 740)
+        winPanel.setBounds(0, 0, 480, 740);
         gamePanel.add(winPanel, Integer.valueOf(15));
         gamePanel.revalidate();
         gamePanel.repaint();
     }
-
     @Override
     public void onGameOver(int finalScore) {
+        // Primero muestra el panel para que el jugador ingrese su nombre (Entregable 6)
+        showNameEntry(finalScore);
+    }
+
+    private void showNameEntry(int score) {
+        playButton.setEnabled(false);
+        playButton.setText("DERROTA");
+        resetButton.setEnabled(false);
+
+        nameEntryPanel.showWithScore(score);
+        gamePanel.setComponentZOrder(nameEntryPanel, 0);
+        gamePanel.revalidate();
+        gamePanel.repaint();
+    }
+
+    private void saveScoreAndShowGameOver() {
+        String nombre = nameEntryPanel.getPlayerName();
+        if (nombre.isEmpty()) {
+            nombre = "Jugador";
+        }
+        int puntaje = nameEntryPanel.getFinalScore();
+
+        // Guardar en scores.score (ordena y mantiene Top 20) y actualizar el récord visual
+        scoreManager.addScore(nombre, puntaje);
+        this.currentRecord = scoreManager.getHighestScore();
+        recordPanel.setRecord(this.currentRecord);
+        recordPanel.repaint();
+
+        // Ocultar el panel de nombre y mostrar la pantalla final de GameOver con su música
+        nameEntryPanel.setVisible(false);
         MusicPlayer.getInstance().playGameOverMusic();
 
         gamePanel.setComponentZOrder(gameOverPanel, 0);
         gameOverPanel.setVisible(true);
 
-        playButton.setEnabled(false);
-        playButton.setText("DERROTA");
-
         resetButton.setEnabled(true);
         resetButton.setText("REINICIAR");
-
+        gamePanel.revalidate();
         gamePanel.repaint();
     }
 
@@ -299,12 +335,15 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
 
         scorePanel.setScore(0);
         livePanel.setLives(3);
-        // Nota: currentRecord no se reinicia aquí para conservar el récord de la sesión
+        // Nota: currentRecord se conserva intacto en el HUD
 
         this.nivelProgreso = 1;
         levelPanel.setLevel(1);
 
         gameOverPanel.setVisible(false);
+        if (nameEntryPanel != null) {
+            nameEntryPanel.setVisible(false);
+        }
 
         for (java.awt.event.ActionListener al : resetButton.getActionListeners()) {
             resetButton.removeActionListener(al);
@@ -340,16 +379,16 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         gamePanel.requestFocusInWindow();
     }
 
-        /**
-         * Avanza al siguiente nivel, actualiza el LevelPanel e inicia una nueva pista musical aleatoria.
-         */
+    /**
+     * Avanza al siguiente nivel, actualiza el LevelPanel e inicia una nueva pista musical aleatoria.
+     */
     public void avanzarSiguienteNivel() {
         nivelProgreso++;
 
         // 1. Sincronizar el incremento numérico en el LevelPanel
         this.onLevelStarted(nivelProgreso);
 
-        // 2. Iniciar nueva pista musical aleatoria distinta a la anterior (Entregable 5)
+        // 2. Iniciar nueva pista musical aleatoria distinta a la anterior
         MusicPlayer.getInstance().playLevelMusic();
 
         if (background != null) {
@@ -397,7 +436,7 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
 
         resetButton.setText("REINICIAR");
         resetButton.setEnabled(false);
-        playButton.setText("PAUSA");
+        playButton.setText("JUGAR");
         playButton.setEnabled(true);
 
         // Remoción del letrero gráfico de victoria del nivel anterior
