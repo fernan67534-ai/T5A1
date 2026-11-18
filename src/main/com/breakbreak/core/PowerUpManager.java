@@ -9,6 +9,7 @@ import main.com.breakbreak.enums.PowerUpType;
 import main.com.breakbreak.events.CollisionEvent;
 import main.com.breakbreak.events.PowerUpRegistry;
 import main.com.breakbreak.util.CollisionObserver;
+import main.com.breakbreak.util.SoundPlayer;
 
 import javax.swing.JComponent;
 import java.awt.Rectangle;
@@ -69,7 +70,6 @@ public class PowerUpManager implements CollisionObserver {
 
         Rectangle innerArea = border.getInnerBounds();
 
-        // CORRECCIÓN COMPATIBILIDAD JAVA: Reemplazo de Math.clamp por lógica relacional estándar
         if (spawnX < innerArea.x) {
             spawnX = innerArea.x;
         } else if (spawnX > innerArea.x + innerArea.width - PowerUpComponent.RENDER_WIDTH) {
@@ -78,7 +78,7 @@ public class PowerUpManager implements CollisionObserver {
 
         PowerUpComponent powerUp = new PowerUpComponent(type, spawnX, spawnY);
         activePowerUps.add(powerUp);
-        host.add(powerUp, Integer.valueOf(0)); // Colocar al frente de la capa gráfica respetando Swing
+        host.add(powerUp, Integer.valueOf(0));
         host.repaint();
     }
 
@@ -105,16 +105,15 @@ public class PowerUpManager implements CollisionObserver {
     }
 
     /**
-     * REDISEÑO ARQUITECTÓNICO MODULAR: Invoca polimórficamente la estrategia
-     * correspondiente mapeada en el registro sin condicionales duros.
+     * Invoca el sonido de captura de bono y aplica el efecto polimórfico al motor.
      */
     private void applyEffect(PowerUpComponent powerUp) {
-        PowerUpType type = powerUp.getType();
+        // Dispara el efecto de sonido de captura de power-up (Entregable 5)
+        SoundPlayer.getInstance().playBonus();
 
-        // Imprime con orgullo la letra en la consola de IntelliJ al capturarlo
+        PowerUpType type = powerUp.getType();
         System.out.println("Bono Capturado Especial: " + type.name());
 
-        // Si el lazo con el motor está establecido, ejecuta el poder en caliente
         if (this.gameLoop != null) {
             PowerUpRegistry.getAction(type).apply(this.gameLoop);
         }

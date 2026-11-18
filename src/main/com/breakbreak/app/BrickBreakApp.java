@@ -6,6 +6,8 @@ import main.com.breakbreak.components.hud.*;
 import main.com.breakbreak.enums.State;
 import main.com.breakbreak.core.GameLoop;
 import main.com.breakbreak.util.GameEventListener;
+import main.com.breakbreak.util.MusicPlayer;
+import main.com.breakbreak.util.SoundPlayer;
 
 import javax.swing.*;
 import java.awt.*;
@@ -16,7 +18,7 @@ import java.util.List;
 
 public class BrickBreakApp extends JFrame implements GameEventListener {
 
-    private BackgroundComponent background; // Atributo global para el control dinámico dual de animaciones
+    private BackgroundComponent background;
 
     private final JLayeredPane gamePanel;
     private final JPanel sidebarPanel;
@@ -43,7 +45,9 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
     private int nivelProgreso = 1;
 
     public BrickBreakApp() {
-        // CONFIGURACIÓN DE LA VENTANA GENERAL CON ALTO PREMIUM AMPLIADO PARA DAR SIMETRÍA
+        SoundPlayer.getInstance().preload();
+        MusicPlayer.getInstance().preload();
+
         setTitle("BREAKBREAK - PARADIS EDITION");
         setSize(860, 780);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -53,13 +57,11 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         getContentPane().setLayout(null);
         getContentPane().setBackground(new Color(10, 10, 10));
 
-        // 1. LIENZO IZQUIERDO DE JUEGO ACTUALIZADO A LAS PROPORCIONES DE TU ARENA (480x740)
         gamePanel = new JLayeredPane();
         gamePanel.setBounds(0, 0, 480, 740);
         gamePanel.setLayout(null);
         getContentPane().add(gamePanel);
 
-        // 2. PANEL DERECHO DE SIDEBAR CONTROLADORA CON LAYOUT ABSOLUTO EXTENDIDO
         sidebarPanel = new JPanel();
         sidebarPanel.setBounds(480, 0, 380, 740);
         sidebarPanel.setBackground(new Color(20, 21, 23));
@@ -70,13 +72,11 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         border = new BorderComponent(new Rectangle(0, 0, 480, 740));
         Rectangle area = border.getInnerBounds();
 
-        // Reposicionamiento inicial proporcional de actores móviles
         ball = new BallComponent(227, 490, 26, 26);
         paddle = new PaddleComponent(195, 600, 90, 20);
 
-        // Fondo animado cinemático unificado a la dimensión total de la arena (480x740)
         background = new BackgroundComponent(480, 740);
-        gamePanel.add(background, Integer.valueOf(-10)); // Capa Z más profunda
+        gamePanel.add(background, Integer.valueOf(-10));
 
         String[] matrixColors = {"blue", "orange", "yellow", "aqua", "cyan", "green"};
         this.blocks = new BlockComponent[7][6];
@@ -141,60 +141,58 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         bonoSidebarPanel = new BonoSidebarPanel();
 
         playButton = new MaterialButton("JUGAR");
-        playButton.setFont(new Font("Monospaced", Font.BOLD, 14));
+        playButton.setFont(new Font("Monospaced", Font.BOLD, 12));
         playButton.setFocusable(false);
 
         resetButton = new MaterialButton("REINICIAR");
-        resetButton.setFont(new Font("Monospaced", Font.BOLD, 14));
+        resetButton.setFont(new Font("Monospaced", Font.BOLD, 12));
         resetButton.setFocusable(false);
         resetButton.setEnabled(false);
 
         exitButton = new MaterialButton("SALIR");
-        exitButton.setFont(new Font("Monospaced", Font.BOLD, 14));
+        exitButton.setFont(new Font("Monospaced", Font.BOLD, 12));
         exitButton.setFocusable(false);
 
-        // =========================================================================
-        // 📊 COMPOSICIÓN SECUENCIAL Y ASIGNACIÓN GEOMÉTRICA SIMÉTRICA DEL SIDEBAR
-        // =========================================================================
-        recordPanel.setBounds(46, 10, 288, 136);
-        scorePanel.setBounds(46, 156, 288, 136);
-        livePanel.setBounds(70, 302, 240, 136);
-        levelPanel.setBounds(70, 448, 240, 136);
+        // Posiciones exactas en el panel derecho
+        recordPanel.setBounds(46, 8, 288, 70);
+        scorePanel.setBounds(46, 85, 288, 136);
+        livePanel.setBounds(66, 228, 248, 136);
+        levelPanel.setBounds(70, 372, 240, 136);
+        bonoSidebarPanel.setBounds(30, 518, 320, 65);
 
-        // 🔥 REPARACIÓN CRÍTICA: Se remueve la duplicidad y queda fijado a 65px de alto exactos
-        bonoSidebarPanel.setBounds(30, 595, 320, 65);
-
+        // Inyección de todos los paneles al sidebar (faltaban estas líneas)
         sidebarPanel.add(recordPanel);
         sidebarPanel.add(scorePanel);
         sidebarPanel.add(livePanel);
         sidebarPanel.add(levelPanel);
         sidebarPanel.add(bonoSidebarPanel);
 
-        // 🔄 REAJUSTE DE FLANCO: Desplazamos los botones hacia abajo (Y: 672) para equilibrar el espacio
-        playButton.setBounds(30, 672, 100, 42);
-        resetButton.setBounds(140, 672, 100, 42);
-        exitButton.setBounds(250, 672, 100, 42);
+        // Botones equilibrados con ancho suficiente para leer REINICIAR completo
+        playButton.setBounds(25, 595, 102, 40);
+        resetButton.setBounds(137, 595, 106, 40);
+        exitButton.setBounds(253, 595, 102, 40);
 
         sidebarPanel.add(playButton);
         sidebarPanel.add(resetButton);
         sidebarPanel.add(exitButton);
+
         levelPanel.setLevel(nivelProgreso);
 
-        // INICIALIZACIÓN DEL MOTOR CENTRAL PASANDO UNA LISTA VACÍA POR COMPATIBILIDAD DE FIRMA
         gameLoop = new GameLoop(gamePanel, ball, paddle, border, blocks, new ArrayList<>());
         gameLoop.addListener(this);
         gameLoop.setBonoSidebarPanel(bonoSidebarPanel);
-
         // =========================================================================
-        // 🏁 LISTENERS OPERATIVOS BLINDADOS ANTI-CONGELAMIENTO
+        // 🏁 LISTENERS OPERATIVOS CON CONTROL DE MÚSICA INTEGRADO
         // =========================================================================
         playButton.addActionListener(e -> {
             if (gameLoop != null) {
                 if (gameLoop.getState() == main.com.breakbreak.enums.State.RUNNING) {
                     gameLoop.pause();
+                    MusicPlayer.getInstance().stop();
                     playButton.setText("REANUDAR");
                 } else {
                     gameLoop.start();
+                    MusicPlayer.getInstance().playLevelMusic();
                     playButton.setText("PAUSA");
                     resetButton.setEnabled(true);
                 }
@@ -209,9 +207,11 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
             gamePanel.requestFocusInWindow();
         });
 
-        exitButton.addActionListener(e -> System.exit(0));
+        exitButton.addActionListener(e -> {
+            MusicPlayer.getInstance().stop();
+            System.exit(0);
+        });
 
-        // Evento de foco de seguridad al abrir la ventana por primera vez
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowOpened(WindowEvent e) {
@@ -219,9 +219,9 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
             }
         });
 
-        // Cargar síncronamente el récord histórico real guardado desde el DatabaseManager
-        this.currentRecord = main.com.breakbreak.core.DatabaseManager.getInstance().getHighScore();
-        recordPanel.setRecord(currentRecord);
+        // Iniciar récord de sesión en 0 según la rúbrica del Entregable 5
+        this.currentRecord = 0;
+        recordPanel.setRecord(0);
     }
 
     // =========================================================================
@@ -230,14 +230,12 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
 
     @Override
     public void onScoreChanged(int currentScore) {
-        // Enlaza la lógica matemática de colisiones con los marcadores gráficos
         scorePanel.setScore(currentScore);
 
         if (currentScore > currentRecord) {
             currentRecord = currentScore;
             recordPanel.setRecord(currentRecord);
-            // Salva de inmediato el récord batido en caliente al almacenamiento local persistente
-            main.com.breakbreak.core.DatabaseManager.getInstance().guardarRecordHistorico(currentRecord);
+            recordPanel.repaint();
         }
     }
 
@@ -259,57 +257,55 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
 
     @Override
     public void onVictory(int finalScore) {
+        MusicPlayer.getInstance().playWinMusic();
+
         playButton.setEnabled(false);
         playButton.setText("¡VICTORIA!");
 
-        // Transformación táctica del botón de reinicio en compuerta de avance
         resetButton.setEnabled(true);
         resetButton.setText("SIG. NIVEL");
 
-        // Purgamos listeners anteriores para evitar llamadas duplicadas en caliente
         for (java.awt.event.ActionListener al : resetButton.getActionListeners()) {
             resetButton.removeActionListener(al);
         }
 
-        // Vinculamos de forma síncrona el gatillo del siguiente mapa infinito
         resetButton.addActionListener(e -> avanzarSiguienteNivel());
 
         WinPanel winPanel = new WinPanel(finalScore);
-        gamePanel.add(winPanel, Integer.valueOf(15)); // Frente absoluto por encima de todo
+        gamePanel.add(winPanel, Integer.valueOf(15));
         gamePanel.revalidate();
         gamePanel.repaint();
     }
 
-    /**
-     * 🔥 REPARACIÓN CRÍTICA: Activa el botón de REINICIAR en el Game Over
-     * para permitirle al usuario volver a intentar la campaña militar de Paradis.
-     */
     @Override
     public void onGameOver(int finalScore) {
+        MusicPlayer.getInstance().playGameOverMusic();
+
         gamePanel.setComponentZOrder(gameOverPanel, 0);
         gameOverPanel.setVisible(true);
 
         playButton.setEnabled(false);
         playButton.setText("DERROTA");
 
-        // Habilitamos explícitamente el reinicio mecánico
         resetButton.setEnabled(true);
         resetButton.setText("REINICIAR");
 
         gamePanel.repaint();
     }
+
     @Override
     public void onReset() {
-        scorePanel.setScore(0);
-        livePanel.setLives(3); // Estado de salud base de la entrega
+        MusicPlayer.getInstance().stop();
 
-        // Forzar reinicio explícito en Nivel 1
+        scorePanel.setScore(0);
+        livePanel.setLives(3);
+        // Nota: currentRecord no se reinicia aquí para conservar el récord de la sesión
+
         this.nivelProgreso = 1;
         levelPanel.setLevel(1);
 
         gameOverPanel.setVisible(false);
 
-        // Purgamos listeners de victoria antes de restaurar el botón de reinicio común
         for (java.awt.event.ActionListener al : resetButton.getActionListeners()) {
             resetButton.removeActionListener(al);
         }
@@ -327,12 +323,10 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
             bonoSidebarPanel.reset();
         }
 
-        // 🔄 RESTAURACIÓN DUAL: Regresa al set de animación original de Shingeki no Kyojin
         if (background != null) {
             background.cambiarFondoPorNivel(1);
         }
 
-        // Remoción limpia de paneles de victoria de la ronda anterior
         for (Component c : gamePanel.getComponents()) {
             if (c instanceof WinPanel) {
                 gamePanel.remove(c);
@@ -346,22 +340,23 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
         gamePanel.requestFocusInWindow();
     }
 
-    /**
-     * MÓDULO CONTRACTUAL ADAPTATIVO REPARADO: Remueve síncronamente los bloques del lienzo
-     * e inyecta la grilla bidimensional procedural infinita generada por la fábrica de bloques.
-     */
+        /**
+         * Avanza al siguiente nivel, actualiza el LevelPanel e inicia una nueva pista musical aleatoria.
+         */
     public void avanzarSiguienteNivel() {
         nivelProgreso++;
 
-        // 1. Sincronizar el incremento numérico en la pantalla del LevelPanel (Muestra 02)
+        // 1. Sincronizar el incremento numérico en el LevelPanel
         this.onLevelStarted(nivelProgreso);
 
-        // 🔄 MUTACIÓN PROCEDURAL: Conmuta de forma limpia hacia tus 22 nuevas imágenes al saltar al Nivel 2
+        // 2. Iniciar nueva pista musical aleatoria distinta a la anterior (Entregable 5)
+        MusicPlayer.getInstance().playLevelMusic();
+
         if (background != null) {
             background.cambiarFondoPorNivel(nivelProgreso);
         }
 
-        // 2. Limpiar todos los bloques remanentes de Swing del JLayeredPane izquierdo
+        // 3. Limpiar todos los bloques remanentes de Swing del JLayeredPane izquierdo
         if (this.blocks != null) {
             for (int r = 0; r < 7; r++) {
                 for (int c = 0; c < 6; c++) {
@@ -372,13 +367,13 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
             }
         }
 
-        // 3. Solicitar a la fábrica la construcción del mapa procedural infinito en la matriz bidimensional correcta
+        // 4. Solicitar a la fábrica la construcción del mapa procedural en la matriz bidimensional
         Rectangle area = border.getInnerBounds();
         this.blocks = main.com.breakbreak.core.BlockFactory.generarNivelInfinito(
                 nivelProgreso, 69, 20, area.x + 3, area.y + 15
         );
 
-        // 4. Poblar las colecciones e inyectar cada bloque JComponent al contenedor gráfico base (Capa 0)
+        // 5. Poblar las colecciones e inyectar cada bloque al contenedor gráfico base
         blockList.clear();
         for (int r = 0; r < 7; r++) {
             for (int c = 0; c < 6; c++) {
@@ -388,10 +383,10 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
             }
         }
 
-        // 5. Reiniciar coordenadas físicas y pasar la nueva matriz de memoria al GameLoop
+        // 6. Reiniciar coordenadas físicas y pasar la nueva matriz de memoria al GameLoop
         gameLoop.resetGameParaSiguienteNivel(this.blocks);
 
-        // 6. Desvincular el comportamiento de avance y restaurar el botón de reinicio estándar de la botonera
+        // 7. Restaurar el botón de reinicio estándar de la botonera
         for (java.awt.event.ActionListener al : resetButton.getActionListeners()) {
             resetButton.removeActionListener(al);
         }
@@ -402,20 +397,18 @@ public class BrickBreakApp extends JFrame implements GameEventListener {
 
         resetButton.setText("REINICIAR");
         resetButton.setEnabled(false);
-        playButton.setText("JUGAR");
+        playButton.setText("PAUSA");
         playButton.setEnabled(true);
 
-        // Remoción del letrero gráfico de victoria (WinPanel) del nivel anterior
+        // Remoción del letrero gráfico de victoria del nivel anterior
         for (Component c : gamePanel.getComponents()) {
             if (c instanceof WinPanel) {
                 gamePanel.remove(c);
             }
         }
 
-        // Sincronizar repintado inmediato de Swing para evitar imágenes residuales
         gamePanel.revalidate();
         gamePanel.repaint();
         gamePanel.requestFocusInWindow();
     }
 }
-

@@ -8,6 +8,7 @@ import main.com.breakbreak.enums.State;
 import main.com.breakbreak.events.CollisionEvent;
 import main.com.breakbreak.util.GameEventListener;
 import main.com.breakbreak.util.CollisionObserver;
+import main.com.breakbreak.util.SoundPlayer;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,7 +23,6 @@ public class GameLoop implements ActionListener {
     private static final int DELAY_MS = 1000 / FPS;
     private static final double BASE_SPEED = 4.5;
 
-    // Colecciones dinámicas concurrentes para el soporte de proyectiles y reclutas aliados
     private final List<ReclutaComponent> escuadronAliado = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<BolaFuego> bolasFuegoActivas = new java.util.concurrent.CopyOnWriteArrayList<>();
 
@@ -30,7 +30,7 @@ public class GameLoop implements ActionListener {
     private final PaddleComponent paddle;
     private final BallComponent ball;
     private final BorderComponent border;
-    private BlockComponent[][] blocks; // Removido modificador final para inyección dinámica de niveles infinitos
+    private BlockComponent[][] blocks;
     private final List<HeartComponent> hearts;
     private final List<GameEventListener> listeners = new ArrayList<>();
     private final PowerUpManager powerUpManager;
@@ -42,11 +42,11 @@ public class GameLoop implements ActionListener {
     private double vx = 3.0;
     private double vy = -3.0;
     private int lives = 3;
-    private int totalBlocks = 42; // Sincronizado estrictamente con la grilla 7x6 de la fábrica
+    private int totalBlocks = 42;
     private int destroyedBlocks = 0;
     private int score = 0;
 
-    // --- VARIABLES DE ESTADO LÓGICO PARA LOS 19 PODERES DE ATTACK ON TITAN ---
+    // --- VARIABLES DE ESTADO LÓGICO PARA LOS 19 PODERES ---
     private int damageMultiplier = 1;
     private int scoreMultiplier = 1;
     private boolean stickyPaddle = false;
@@ -55,7 +55,6 @@ public class GameLoop implements ActionListener {
     private boolean shootingMode = false;
     private long lastShotTime = 0;
 
-    // Referencia para enviar las actualizaciones al feed estático del Sidebar derecho
     private BonoSidebarPanel bonoSidebarPanel;
 
     public JComponent getHost() { return this.host; }
@@ -92,7 +91,7 @@ public class GameLoop implements ActionListener {
 
     public void start() {
         if (state == State.READY || state == State.PAUSED) {
-            if (state == State.PAUSED) state = State.RUNNING;
+            state = State.RUNNING; // Inicia el movimiento al darle Start/Jugar
             if (timer != null && !timer.isRunning()) timer.start();
         }
     }
@@ -104,10 +103,6 @@ public class GameLoop implements ActionListener {
         }
     }
 
-    /**
-     * MÓDULO CONTRACTUAL DE CAMPAÑA: Re-vincula la nueva matriz de bloques procedurales
-     * generados por la fábrica para reiniciar las colisiones físicas de la nueva ronda.
-     */
     public void resetGameParaSiguienteNivel(BlockComponent[][] nuevosBloques) {
         this.blocks = nuevosBloques;
         this.destroyedBlocks = 0;
@@ -116,7 +111,6 @@ public class GameLoop implements ActionListener {
         this.vx = 3.0;
         this.vy = -3.0;
 
-        // Limpieza absoluta de modificadores tácticos entre niveles
         this.damageMultiplier = 1;
         this.scoreMultiplier = 1;
         this.stickyPaddle = false;
@@ -186,9 +180,9 @@ public class GameLoop implements ActionListener {
         if (host != null) host.repaint();
         if (timer != null) timer.start();
     }
-
     @Override
     public void actionPerformed(ActionEvent e) { update(); }
+
     private void update() {
         if (host == null || ball == null || paddle == null || border == null || blocks == null) return;
 
@@ -231,7 +225,10 @@ public class GameLoop implements ActionListener {
         if (ballY <= area.y) { ballY = area.y; vy = Math.abs(vy); }
         ball.setPosition(ballX, ballY);
 
+        // COLISIÓN CONTRA LA PALETA
         if (vy > 0 && ball.getBounds() != null && paddle.getBounds() != null && ball.getBounds().intersects(paddle.getBounds())) {
+            SoundPlayer.getInstance().playBounce(); // <-- EFECTO DE SONIDO: Rebote en paleta
+
             if (this.stickyPaddle) {
                 this.ballAttached = true;
                 this.vy = 0;
@@ -254,11 +251,14 @@ public class GameLoop implements ActionListener {
             ball.setPosition(ballX, ballY);
         }
 
+        // COLISIÓN CONTRA BLOQUES
         outerLoop:
         for (int r = 0; r < blocks.length; r++) {
             for (int c = 0; c < blocks[r].length; c++) {
                 BlockComponent block = blocks[r][c];
                 if (block != null && block.isVisible() && !block.isDestroyed() && ball.getBounds() != null && ball.getBounds().intersects(block.getBounds())) {
+                    SoundPlayer.getInstance().playBlock(); // <-- EFECTO DE SONIDO: Rebote en bloque
+
                     vy = -vy;
                     ball.setVy((int)Math.round(vy));
                     boolean blockBroken = false;
@@ -294,19 +294,17 @@ public class GameLoop implements ActionListener {
             }
         }
 
-        // =========================================================================
-        // 🚀 GRAVEDAD ACTIVA REPARADA: LAS CÁPSULAS CAEN DE FORMA CONSTANTE A 60 FPS
-        // =========================================================================
         if (powerUpManager != null) {
             powerUpManager.update();
         }
-        // =========================================================================
-        // 🔴 MOTOR SÍNCRONO: LANZAMIENTO TRIPLE EN ABANICO DE CAÑONAZOS GIF (CÁPSULA N)
-        // =========================================================================
+
+        // DISPARO DE LÁSER / CAÑONES
         if (this.shootingMode) {
             long now = System.currentTimeMillis();
             if (now - lastShotTime > 600) {
                 lastShotTime = now;
+                SoundPlayer.getInstance().playLaser(); // <-- EFECTO DE SONIDO: Disparo de láser
+
                 int centroRaquetaX = paddle.getX() + (paddle.getWidth() / 2) - 16;
                 int spawnY = paddle.getY() - 32;
                 BolaFuego fuegoIzquierda = new BolaFuego(centroRaquetaX, spawnY, -2.5, -5.0);
@@ -322,7 +320,6 @@ public class GameLoop implements ActionListener {
                 }
             }
         }
-
         for (BolaFuego fuego : bolasFuegoActivas) {
             fuego.actualizarPosicion();
             if (fuego.getY() < area.y || fuego.getX() < area.x || fuego.getX() > area.x + area.width) {
@@ -334,6 +331,7 @@ public class GameLoop implements ActionListener {
                 for (int c = 0; c < blocks[r].length; c++) {
                     BlockComponent b = blocks[r][c];
                     if (b != null && b.isVisible() && !b.isDestroyed() && fuego.getBounds().intersects(b.getBounds())) {
+                        SoundPlayer.getInstance().playBlock(); // Sonido al destruir bloque con láser
                         if (host != null) host.remove(fuego);
                         bolasFuegoActivas.remove(fuego);
                         boolean broken = false;
@@ -376,7 +374,6 @@ public class GameLoop implements ActionListener {
             if (rY <= area.y) { rY = area.y; rVy = -rVy; }
             recluta.setVx(rVx); recluta.setVy(rVy); recluta.setLocation(rX, rY);
 
-            // 🔥 COMPUERTAS DE COLISIÓN REPARADAS: Mikasa y Armin rebotan físicamente con el Paddle
             if (rVy > 0 && recluta.getBounds() != null && paddle.getBounds() != null && recluta.getBounds().intersects(paddle.getBounds())) {
                 rVy = -Math.abs(rVy);
                 recluta.setVy(rVy);
@@ -388,6 +385,7 @@ public class GameLoop implements ActionListener {
                 for (int c = 0; c < blocks[r].length; c++) {
                     BlockComponent b = blocks[r][c];
                     if (b != null && b.isVisible() && !b.isDestroyed() && recluta.getBounds().intersects(b.getBounds())) {
+                        SoundPlayer.getInstance().playBlock();
                         rVy = -rVy; recluta.setVy(rVy);
                         boolean broken = false;
                         for (int d = 0; d < damageMultiplier; d++) { if (b.takeDamage()) { broken = true; break; } }
@@ -416,27 +414,40 @@ public class GameLoop implements ActionListener {
         // =========================================================================
         if (ball != null && area != null) {
             if (ball.getY() + size >= area.y + area.height) {
-                if (timer != null) timer.stop();
-                lives--;
-                for (BolaFuego f : bolasFuegoActivas) { if (f != null && host != null) host.remove(f); }
-                bolasFuegoActivas.clear();
-                for (ReclutaComponent r : escuadronAliado) { if (r != null && host != null) host.remove(r); }
-                escuadronAliado.clear();
-                if (lives > 0) {
-                    ball.setLocation(227, 450);
-                    if (paddle != null) paddle.setLocation(195, 540);
-                    syncCoordinates();
-                    vx = 3.0; vy = -3.0; state = State.READY;
-                    for (GameEventListener l : listeners) { if (l != null) l.onLifeLost(lives); }
-                    if (timer != null) timer.start();
-                } else {
-                    state = State.GAME_OVER;
-                    for (GameEventListener l : listeners) { if (l != null) l.onGameOver(score); }
-                }
+                loseLife(); // Llama al método dedicado de pérdida de vida
             }
         }
         if (host != null) host.repaint();
         Toolkit.getDefaultToolkit().sync();
+    }
+
+    /**
+     * Gestiona la pérdida de vida, dispara el sonido correspondiente,
+     * reinicia posiciones o detiene el juego en GAME_OVER.
+     */
+    public void loseLife() {
+        SoundPlayer.getInstance().playLoseBall(); // <-- EFECTO DE SONIDO: Vida perdida
+
+        if (timer != null) timer.stop();
+        lives--;
+
+        for (BolaFuego f : bolasFuegoActivas) { if (f != null && host != null) host.remove(f); }
+        bolasFuegoActivas.clear();
+        for (ReclutaComponent r : escuadronAliado) { if (r != null && host != null) host.remove(r); }
+        escuadronAliado.clear();
+
+        if (lives > 0) {
+            ball.setLocation(227, 450);
+            if (paddle != null) paddle.setLocation(195, 540);
+            syncCoordinates();
+            vx = 3.0; vy = -3.0; state = State.READY;
+            for (GameEventListener l : listeners) { if (l != null) l.onLifeLost(lives); }
+            if (timer != null) timer.start();
+        } else {
+            if (powerUpManager != null) powerUpManager.clear();
+            state = State.GAME_OVER;
+            for (GameEventListener l : listeners) { if (l != null) l.onGameOver(score); }
+        }
     }
 
     private void checkVictoryConditionInternal() {
@@ -472,7 +483,6 @@ public class GameLoop implements ActionListener {
     public void setStickyPaddle(boolean active) { this.stickyPaddle = active; if (!active) this.ballAttached = false; }
     public void setArmoredPaddle(boolean active) { this.armoredPaddle = active; }
     public void setScoreMultiplier(int mult) { this.scoreMultiplier = mult; }
-
     public void lanzarPelotaMagnetica() {
         if (state == State.READY || (this.stickyPaddle && this.ballAttached)) {
             this.ballAttached = false;
@@ -512,13 +522,14 @@ public class GameLoop implements ActionListener {
     public void triggerRumbleEffect() {
         if (blocks == null || blocks.length == 0 || blocks[0] == null) return;
 
-        // Recorremos de manera bidimensional todas las columnas 'c' de la fila superior fija '0'
+        boolean bloqueDestruido = false;
         for (int c = 0; c < blocks[0].length; c++) {
             BlockComponent block = blocks[0][c];
             if (block != null && block.isVisible() && !block.isDestroyed()) {
                 block.setVisible(false);
                 block.setDestroyed(true);
                 destroyedBlocks++;
+                bloqueDestruido = true;
 
                 int pts = 10;
                 if (block.getColor() != null) {
@@ -534,6 +545,9 @@ public class GameLoop implements ActionListener {
                 score += (pts * scoreMultiplier);
             }
         }
+        if (bloqueDestruido) {
+            SoundPlayer.getInstance().playBlock();
+        }
         for (GameEventListener l : listeners) {
             if (l != null) l.onScoreChanged(this.score);
         }
@@ -545,6 +559,7 @@ public class GameLoop implements ActionListener {
      */
     public void destroyAllBasicBlocks() {
         if (blocks == null) return;
+        boolean bloqueDestruido = false;
         for (int r = 0; r < blocks.length; r++) {
             for (int c = 0; c < blocks[r].length; c++) {
                 BlockComponent block = blocks[r][c];
@@ -554,6 +569,7 @@ public class GameLoop implements ActionListener {
                         block.setVisible(false);
                         block.setDestroyed(true);
                         destroyedBlocks++;
+                        bloqueDestruido = true;
 
                         int pts = 10;
                         if (color.contains("cyan")) {
@@ -565,6 +581,9 @@ public class GameLoop implements ActionListener {
                     }
                 }
             }
+        }
+        if (bloqueDestruido) {
+            SoundPlayer.getInstance().playBlock();
         }
         for (GameEventListener l : listeners) {
             if (l != null) l.onScoreChanged(this.score);

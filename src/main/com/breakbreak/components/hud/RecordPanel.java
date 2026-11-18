@@ -1,20 +1,36 @@
 package main.com.breakbreak.components.hud;
 
 import java.awt.Dimension;
+import java.net.URL;
 
 public class RecordPanel extends PanelComponent {
     private final NumberComponent recordDisplay;
 
     public RecordPanel() {
-        // IGUALADO SIMÉTRICO: Comparte las mismas dimensiones nativas que el puntaje (288x136)
-        super("record", "/image/record.png", new Dimension(288, 136));
+        // Tamaño estándar unificado para el HUD
+        super("record", obtenerRutaSegura(), new Dimension(288, 70));
 
-        // Posicionado milimétrico para clavar los 6 dígitos en la zona gris inferior
-        this.recordDisplay = new NumberComponent(6, 45, 65, 178, 42);
+        // Centrado horizontalmente en la parte inferior del marco de récord
+        // X: 64, Y: 36 (debajo de la palabra RECORD), Ancho: 160, Alto: 24
+        this.recordDisplay = new NumberComponent(6, 64, 36, 160, 24);
         this.add(recordDisplay);
+    }
+
+    private static String obtenerRutaSegura() {
+        String[] rutasPosibles = new String[] {
+                "/record.png",
+                "/images/record.png",
+                "/image/record.png"
+        };
+        for (String ruta : rutasPosibles) {
+            URL url = RecordPanel.class.getResource(ruta);
+            if (url != null) return ruta;
+        }
+        return "/record.png";
     }
 
     public void setRecord(int record) {
         this.recordDisplay.setValue(record);
+        this.recordDisplay.repaint();
     }
 }
